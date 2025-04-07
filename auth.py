@@ -25,6 +25,30 @@ def init_db():
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+def authenticate_user(username, password):
+    conn = sqlite3.connect('health_data.db')
+    c = conn.cursor()
+    c.execute("SELECT password FROM users WHERE username=?", (username,))
+    result = c.fetchone()
+    conn.close()
+    
+    if result and result[0] == hash_password(password):
+        return True
+    return False
+
+def register_user(username, password):
+    conn = sqlite3.connect('health_data.db')
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO users VALUES (?, ?)", 
+                 (username, hash_password(password)))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
 def login_user():
     st.sidebar.title("👤 Login")
     username = st.sidebar.text_input("Username")

@@ -6,11 +6,14 @@ import os
 from dotenv import load_dotenv
 import datetime
 import joblib
-from model import train_model, preprocess_symptoms
+from model import train_model, preprocess_symptoms, DiseasePredictor
 import plotly.express as px
 import plotly.graph_objects as go
+import sqlite3
 
-# Add this near the top of the file after imports
+# Initialize session state
+if 'user' not in st.session_state:
+    st.session_state.user = None
 if 'history' not in st.session_state:
     st.session_state.history = []
 
@@ -406,22 +409,35 @@ def login_user():
         else:
             st.warning("Invalid credentials")
 
+def create_user_table():
+    conn = sqlite3.connect('health_data.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (username TEXT PRIMARY KEY, password TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS predictions
+                 (username TEXT, disease TEXT, prediction TEXT, 
+                  risk_score REAL, timestamp DATETIME)''')
+    conn.commit()
+    conn.close()
+
 def main():
-    if 'logged_in' not in st.session_state:
+    st.title("🏥 Multiple Disease Prediction System")
+    
+    # Sidebar for navigation
+    menu = st.sidebar.selectbox(
+        "Navigation",
+        ["Login/Register", "Disease Prediction", "History & Analytics"]
+    )
+    
+    if menu == "Login/Register":
         login_user()
-        return
-    
-    # Add API key check
-    api_key_valid = check_api_key()
-    
-    if st.session_state.get('is_admin'):
-        tab1, tab2 = st.tabs(["Prediction Tool", "Admin Dashboard"])
-        with tab1:
-            show_prediction_tool()
-        with tab2:
-            show_admin_dashboard()
-    else:
+    elif menu == "Disease Prediction" and st.session_state.user:
         show_prediction_tool()
+    elif menu == "History & Analytics" and st.session_state.user:
+        show_analytics()
+    else:
+        st.warning("Please login to access this feature")
 
 if __name__ == "__main__":
+    create_user_table()
     main()

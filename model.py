@@ -1,166 +1,44 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
 import joblib
 
-def preprocess_symptoms(symptoms_text):
-    """
-    Preprocess symptom text for model input
-    """
-    # Convert to lowercase
-    symptoms = symptoms_text.lower()
+class DiseasePredictor:
+    def __init__(self):
+        self.models = {}
+        self.scalers = {}
+        self.diseases = ['Heart Disease', 'Diabetes', 'Lung Cancer']
     
-    # Remove extra whitespace
-    symptoms = ' '.join(symptoms.split())
+    def create_sample_data(self, disease_type):
+        if disease_type == 'Heart Disease':
+            return self._create_heart_data()
+        elif disease_type == 'Diabetes':
+            return self._create_diabetes_data()
+        else:
+            return self._create_lung_cancer_data()
     
-    # Remove special characters except commas
-    symptoms = ''.join(char for char in symptoms if char.isalnum() or char in [',', ' '])
+    def train_all_models(self):
+        for disease in self.diseases:
+            X, y = self.create_sample_data(disease)
+            self._train_model(disease, X, y)
     
-    return symptoms
-
-def create_sample_data(n_samples=5000):
-    # Age ranges and probabilities
-    age_ranges = {
-        'young': (18, 40),
-        'middle': (41, 60),
-        'elderly': (61, 90)
-    }
-    
-    # Common symptoms that can appear in both conditions
-    common_symptoms = [
-        'fatigue',
-        'dizziness',
-        'nausea',
-        'headache',
-        'sweating'
-    ]
-    
-    # Symptoms more indicative of heart disease
-    heart_specific_symptoms = [
-        'chest pain',
-        'chest pressure',
-        'arm pain',
-        'jaw pain',
-        'shortness of breath',
-        'irregular heartbeat'
-    ]
-    
-    # General symptoms
-    general_symptoms = [
-        'cough',
-        'runny nose',
-        'muscle tension',
-        'trouble sleeping',
-        'anxiety'
-    ]
-    
-    data = []
-    for _ in range(n_samples):
-        # Age-based risk factors
-        age_group = np.random.choice(['young', 'middle', 'elderly'], p=[0.3, 0.4, 0.3])
-        age = np.random.randint(age_ranges[age_group][0], age_ranges[age_group][1])
+    def _train_model(self, disease, X, y):
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
         
-        # Base disease probability affected by age
-        base_prob = 0.1 if age_group == 'young' else 0.3 if age_group == 'middle' else 0.5
-        
-        # Add some randomness to disease probability
-        disease_prob = np.clip(base_prob + np.random.normal(0, 0.1), 0.05, 0.95)
-        has_disease = np.random.choice([True, False], p=[disease_prob, 1-disease_prob])
-        
-        # Generate symptoms with noise
-        num_symptoms = np.random.randint(2, 5)
-        symptoms = []
-        
-        if has_disease:
-            # Add 1-2 heart-specific symptoms
-            symptoms.extend(np.random.choice(heart_specific_symptoms, 
-                                          size=np.random.randint(1, 3), 
-                                          replace=False))
-        
-        # Add 1-2 common symptoms
-        symptoms.extend(np.random.choice(common_symptoms, 
-                                      size=np.random.randint(1, 3), 
-                                      replace=False))
-        
-        # Maybe add a general symptom
-        if np.random.random() < 0.3:
-            symptoms.append(np.random.choice(general_symptoms))
-        
-        # Shuffle and join symptoms
-        np.random.shuffle(symptoms)
-        symptom_text = ', '.join(symptoms[:num_symptoms])
-        
-        # Gender with slight risk variation
-        gender = np.random.choice(['Male', 'Female', 'Other'], p=[0.48, 0.48, 0.04])
-        
-        # Add noise to the disease label (misdiagnosis simulation)
-        if np.random.random() < 0.05:  # 5% chance of label noise
-            has_disease = not has_disease
-        
-        data.append({
-            'age': age,
-            'gender': gender,
-            'symptoms': symptom_text,
-            'disease': 'Heart Disease' if has_disease else 'Low Risk'
-        })
-    
-    return pd.DataFrame(data)
-
-def get_symptom_suggestions():
-    """
-    Returns a dictionary of symptom categories and their respective symptoms.
-    """
-    return {
-        'common': ['fatigue', 'dizziness', 'nausea', 'headache', 'sweating'],
-        'heart_specific': ['chest pain', 'chest pressure', 'arm pain', 'jaw pain', 'shortness of breath', 'irregular heartbeat'],
-        'general': ['cough', 'runny nose', 'muscle tension', 'trouble sleeping', 'anxiety']
-    }
-
-def train_model():
-    """Train model with symptom vectorization"""
-    try:
-        # Create sample dataset
-        df = create_sample_data()
-        
-        # Initialize encoders
-        gender_encoder = LabelEncoder()
-        symptom_vectorizer = TfidfVectorizer(max_features=100)
-        age_scaler = StandardScaler()
-        
-        # Encode features
-        X_gender = gender_encoder.fit_transform(df['gender'])
-        X_symptoms = symptom_vectorizer.fit_transform(df['symptoms'].astype(str))
-        X_age = age_scaler.fit_transform(df['age'].values.reshape(-1, 1))
-        
-        # Combine features
-        X = np.hstack((X_age, X_gender.reshape(-1, 1), X_symptoms.toarray()))
-        y = (df['disease'] == 'Heart Disease').astype(int)
+        # Scale features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
         
         # Train model
-        model = GradientBoostingClassifier(
-            n_estimators=100,
-            learning_rate=0.1,
-            max_depth=5,
-            random_state=42
-        )
-        model.fit(X, y)
+        model = RandomForestClassifier(n_estimators=100)
+        model.fit(X_train_scaled, y_train)
         
-        # Save all components
-        joblib.dump(model, 'disease_model.joblib')
-        joblib.dump(gender_encoder, 'gender_encoder.joblib')
-        joblib.dump(symptom_vectorizer, 'symptom_vectorizer.joblib')
-        joblib.dump(age_scaler, 'age_scaler.joblib')
+        # Save model and scaler
+        self.models[disease] = model
+        self.scalers[disease] = scaler
         
-        return True
-        
-    except Exception as e:
-        print(f"Error in model training: {str(e)}")
-        raise
-
-if __name__ == "__main__":
-    train_model()
+        # Save to disk
+        joblib.dump(model, f'{disease.lower().replace(" ", "_")}_model.joblib')
+        joblib.dump(scaler, f'{disease.lower().replace(" ", "_")}_scaler.joblib')
