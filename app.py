@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import datetime
 import joblib
 from model import train_model, preprocess_symptoms
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Load API Key
 load_dotenv()
@@ -140,6 +142,74 @@ def show_prediction_history():
         history_df = pd.DataFrame(st.session_state.history)
         st.dataframe(history_df)
 
+def get_symptom_suggestions():
+    """Get common symptom suggestions"""
+    return ["Chest pain", "Shortness of breath", "Fatigue", "Dizziness", "Nausea"]
+
+def validate_symptoms(symptoms):
+    """Validate symptoms against known list"""
+    known_symptoms = get_symptom_suggestions()
+    symptom_list = [s.strip() for s in symptoms.split(",")]
+    valid_symptoms = [s for s in symptom_list if s in known_symptoms]
+    unknown_symptoms = [s for s in symptom_list if s not in known_symptoms]
+    return valid_symptoms, unknown_symptoms
+
+def show_analytics():
+    """Display analytics dashboard"""
+    if st.session_state.history:
+        df = pd.DataFrame(st.session_state.history)
+        
+        st.markdown("### 📊 Analytics Dashboard")
+        
+        # Create tabs for different visualizations
+        tab1, tab2, tab3 = st.tabs(["Risk Distribution", "Age Analysis", "Gender Distribution"])
+        
+        with tab1:
+            fig = px.histogram(df, x="Score", 
+                             title="Risk Score Distribution",
+                             color="Disease")
+            st.plotly_chart(fig)
+        
+        with tab2:
+            fig = px.scatter(df, x="Age", y="Score",
+                           color="Disease",
+                           title="Age vs Risk Score")
+            st.plotly_chart(fig)
+        
+        with tab3:
+            fig = px.pie(df, names="Gender", 
+                        title="Gender Distribution")
+            st.plotly_chart(fig)
+
+def export_data():
+    """Export prediction data"""
+    if st.session_state.history:
+        df = pd.DataFrame(st.session_state.history)
+        
+        # Export options
+        export_format = st.selectbox("Select Format", 
+                                   ["CSV", "Excel", "JSON"])
+        
+        if export_format == "CSV":
+            data = df.to_csv(index=False)
+            mime = "text/csv"
+            file_ext = "csv"
+        elif export_format == "Excel":
+            data = df.to_excel(index=False)
+            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file_ext = "xlsx"
+        else:
+            data = df.to_json(orient="records")
+            mime = "application/json"
+            file_ext = "json"
+            
+        st.download_button(
+            label=f"Download {export_format}",
+            data=data,
+            file_name=f"predictions.{file_ext}",
+            mime=mime
+        )
+
 def main():
     # Add custom CSS
     st.markdown("""
@@ -175,6 +245,10 @@ def main():
         gender = st.radio("⚥ Gender", ["Male", "Female", "Other"])
         symptoms = st.text_area("🔍 Symptoms (comma-separated)")
     
+    # Add symptom suggestions
+    st.markdown("### 💡 Common Symptoms")
+    st.write(", ".join(get_symptom_suggestions()))
+    
     # Center the predict button
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -182,25 +256,40 @@ def main():
     
     if predict_button:
         if name and symptoms:
-            # Get prediction
-            disease, risk_score = predict_disease(age, gender, symptoms)
+            # Validate symptoms
+            valid_symptoms, unknown_symptoms = validate_symptoms(symptoms)
+            if unknown_symptoms:
+                st.warning(f"Unknown symptoms: {', '.join(unknown_symptoms)}")
             
-            # Get AI explanation
-            explanation = get_ai_explanation(age, gender, symptoms, disease, risk_score)
-            
-            # Display results
-            st.subheader("Prediction Results")
-            st.write(f"Disease: {disease}")
-            st.write(f"Risk Score: {risk_score}%")
-            
-            st.subheader("AI Explanation")
-            st.write(explanation)
-            
-            # Add to history
-            add_to_history(name, age, gender, symptoms, disease, risk_score)
-            
-            # Show history
-            show_prediction_history()
+            if valid_symptoms:
+                # Get prediction
+                disease, risk_score = predict_disease(age, gender, symptoms)
+                
+                # Get AI explanation
+                explanation = get_ai_explanation(age, gender, symptoms, disease, risk_score)
+                
+                # Display results
+                st.subheader("Prediction Results")
+                st.write(f"Disease: {disease}")
+                st.write(f"Risk Score: {risk_score}%")
+                
+                st.subheader("AI Explanation")
+                st.write(explanation)
+                
+                # Add to history
+                add_to_history(name, age, gender, symptoms, disease, risk_score)
+                
+                # Show history
+                show_prediction_history()
+                
+                # Add analytics
+                show_analytics()
+                
+                # Add export option
+                st.markdown("### 📥 Export Data")
+                export_data()
+            else:
+                st.error("Please enter valid symptoms")
         else:
             st.warning("Please fill in all fields")
 
