@@ -30,7 +30,8 @@ def load_ml_components():
     return model, gender_encoder, symptom_vectorizer
 
 # Update prediction function
-def predict_disease(age, gender, symptoms):
+def predict_disease(age, gender, symptoms, severity="Moderate", duration="Recent (Days)"):
+    """Enhanced disease prediction with severity and duration"""
     model, gender_encoder, symptom_vectorizer = load_ml_components()
     
     try:
@@ -39,15 +40,32 @@ def predict_disease(age, gender, symptoms):
         symptoms_vectorized = symptom_vectorizer.transform([symptoms])
         age_formatted = np.array([age]).reshape(-1, 1)
         
+        # Add severity and duration factors
+        severity_factor = {"Mild": 0.8, "Moderate": 1.0, "Severe": 1.2}
+        duration_factor = {
+            "Recent (Days)": 0.9,
+            "Short-term (Weeks)": 1.0,
+            "Long-term (Months+)": 1.2
+        }
+        
         # Combine features
         X = np.hstack((age_formatted, gender_encoded.reshape(-1, 1), 
                       symptoms_vectorized.toarray()))
         
-        # Get prediction and probability
-        risk_score = int(model.predict_proba(X)[0][1] * 100)
-        disease = "Heart Disease" if risk_score > 50 else "Low Risk"
+        # Get prediction and adjust by severity/duration
+        base_risk_score = model.predict_proba(X)[0][1] * 100
+        adjusted_score = base_risk_score * severity_factor[severity] * duration_factor[duration]
+        adjusted_score = min(100, adjusted_score)  # Cap at 100
         
-        return disease, risk_score
+        # Expanded disease classification
+        if adjusted_score > 75:
+            disease = "High Risk - Immediate Attention Needed"
+        elif adjusted_score > 50:
+            disease = "Moderate Risk - Medical Consultation Recommended"
+        else:
+            disease = "Low Risk - Monitor Symptoms"
+        
+        return disease, int(adjusted_score)
     except Exception as e:
         st.error(f"Prediction error: {e}")
         return "Error in prediction", 0
@@ -143,16 +161,54 @@ def show_prediction_history():
         st.dataframe(history_df)
 
 def get_symptom_suggestions():
-    """Get common symptom suggestions"""
-    return ["Chest pain", "Shortness of breath", "Fatigue", "Dizziness", "Nausea"]
+    """Get comprehensive symptom suggestions by category"""
+    return {
+        "Cardiovascular": [
+            "chest pain", "shortness of breath", "irregular heartbeat",
+            "rapid heartbeat", "slow heartbeat", "dizziness when standing",
+            "fainting", "swollen legs", "cold extremities", "chest pressure"
+        ],
+        "Respiratory": [
+            "persistent cough", "wheezing", "coughing up blood",
+            "difficulty breathing", "rapid breathing", "chest congestion",
+            "sleep apnea", "excessive sputum", "noisy breathing"
+        ],
+        "Neurological": [
+            "severe headache", "confusion", "memory problems",
+            "difficulty speaking", "vision changes", "weakness in limbs",
+            "tremors", "loss of balance", "seizures", "numbness"
+        ],
+        "Gastrointestinal": [
+            "severe abdominal pain", "persistent nausea", "vomiting",
+            "difficulty swallowing", "unexplained weight loss",
+            "blood in stool", "heartburn", "loss of appetite"
+        ],
+        "General": [
+            "fatigue", "fever", "night sweats", "unexplained weight loss",
+            "muscle weakness", "joint pain", "skin changes", "anxiety",
+            "depression", "sleep problems"
+        ]
+    }
 
 def validate_symptoms(symptoms):
-    """Validate symptoms against known list"""
-    known_symptoms = get_symptom_suggestions()
-    symptom_list = [s.strip() for s in symptoms.split(",")]
-    valid_symptoms = [s for s in symptom_list if s in known_symptoms]
-    unknown_symptoms = [s for s in symptom_list if s not in known_symptoms]
+    """Validate symptoms against expanded list"""
+    all_symptoms = []
+    for category in get_symptom_suggestions().values():
+        all_symptoms.extend(category)
+    
+    symptom_list = [s.strip().lower() for s in symptoms.split(",")]
+    valid_symptoms = [s for s in symptom_list if s in all_symptoms]
+    unknown_symptoms = [s for s in symptom_list if s not in all_symptoms]
     return valid_symptoms, unknown_symptoms
+
+def display_symptom_guide():
+    """Display organized symptom categories"""
+    st.markdown("### 🏥 Symptom Guide")
+    symptoms_dict = get_symptom_suggestions()
+    
+    for category, symptoms in symptoms_dict.items():
+        with st.expander(f"📌 {category} Symptoms"):
+            st.write(", ".join(symptoms))
 
 def show_analytics():
     """Display analytics dashboard"""
@@ -245,9 +301,22 @@ def main():
         gender = st.radio("⚥ Gender", ["Male", "Female", "Other"])
         symptoms = st.text_area("🔍 Symptoms (comma-separated)")
     
-    # Add symptom suggestions
-    st.markdown("### 💡 Common Symptoms")
-    st.write(", ".join(get_symptom_suggestions()))
+    # Replace simple symptom display with organized categories
+    display_symptom_guide()
+    
+    # Add severity selection
+    severity = st.select_slider(
+        "Symptom Severity",
+        options=["Mild", "Moderate", "Severe"],
+        value="Moderate"
+    )
+    
+    # Add duration
+    duration = st.select_slider(
+        "Duration of Symptoms",
+        options=["Recent (Days)", "Short-term (Weeks)", "Long-term (Months+)"],
+        value="Recent (Days)"
+    )
     
     # Center the predict button
     col1, col2, col3 = st.columns([1,2,1])
@@ -263,7 +332,7 @@ def main():
             
             if valid_symptoms:
                 # Get prediction
-                disease, risk_score = predict_disease(age, gender, symptoms)
+                disease, risk_score = predict_disease(age, gender, symptoms, severity, duration)
                 
                 # Get AI explanation
                 explanation = get_ai_explanation(age, gender, symptoms, disease, risk_score)
