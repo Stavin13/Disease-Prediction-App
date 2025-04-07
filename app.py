@@ -154,21 +154,12 @@ def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
     except:
         pass
     
-    # Try Hugging Face models
+    # Try Hugging Face models as fallback
     try:
         from transformers import pipeline
         classifier = pipeline("text2text-generation", 
                             model="google/flan-t5-base")
         explanation = classifier(prompt)[0]['generated_text']
-        return explanation
-    except:
-        pass
-    
-    # Try local LLaMA model as fallback
-    try:
-        from llama_cpp import Llama
-        llm = Llama(model_path="models/llama-2-7b-chat.gguf")
-        explanation = llm(prompt)['choices'][0]['text']
         return explanation
     except:
         return "Unable to generate explanation. Please try again."
