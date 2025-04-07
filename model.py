@@ -123,27 +123,44 @@ def get_symptom_suggestions():
 
 def train_model():
     """Train model with symptom vectorization"""
-    # Create sample dataset
-    df = create_sample_data()
-    
-    # Initialize encoders
-    gender_encoder = LabelEncoder()
-    # Create and fit the TF-IDF vectorizer with all possible symptoms
-    all_symptoms = []
-    for category in get_symptom_suggestions().values():
-        all_symptoms.extend(category)
-    symptom_vectorizer = TfidfVectorizer(vocabulary=all_symptoms)
-    
-    # Encode features
-    X_gender = gender_encoder.fit_transform(df['gender'])
-    # Ensure symptoms are strings before vectorization
-    df['symptoms'] = df['symptoms'].astype(str)
-    X_symptoms = symptom_vectorizer.fit_transform(df['symptoms'])
-    X_age = df['age'].values.reshape(-1, 1)
-    
-    # Combine features
-    X = np.hstack((X_age, X_gender.reshape(-1, 1), X_symptoms.toarray()))
-    y = (df['disease'] == 'Heart Disease').astype(int)
+    try:
+        # Create sample dataset
+        df = create_sample_data()
+        
+        # Initialize encoders
+        gender_encoder = LabelEncoder()
+        symptom_vectorizer = TfidfVectorizer(max_features=100)
+        age_scaler = StandardScaler()
+        
+        # Encode features
+        X_gender = gender_encoder.fit_transform(df['gender'])
+        X_symptoms = symptom_vectorizer.fit_transform(df['symptoms'].astype(str))
+        X_age = age_scaler.fit_transform(df['age'].values.reshape(-1, 1))
+        
+        # Combine features
+        X = np.hstack((X_age, X_gender.reshape(-1, 1), X_symptoms.toarray()))
+        y = (df['disease'] == 'Heart Disease').astype(int)
+        
+        # Train model
+        model = GradientBoostingClassifier(
+            n_estimators=100,
+            learning_rate=0.1,
+            max_depth=5,
+            random_state=42
+        )
+        model.fit(X, y)
+        
+        # Save all components
+        joblib.dump(model, 'disease_model.joblib')
+        joblib.dump(gender_encoder, 'gender_encoder.joblib')
+        joblib.dump(symptom_vectorizer, 'symptom_vectorizer.joblib')
+        joblib.dump(age_scaler, 'age_scaler.joblib')
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error in model training: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     train_model()

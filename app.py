@@ -25,24 +25,32 @@ def load_ml_components():
         model = joblib.load('disease_model.joblib')
         gender_encoder = joblib.load('gender_encoder.joblib')
         symptom_vectorizer = joblib.load('symptom_vectorizer.joblib')
+        age_scaler = joblib.load('age_scaler.joblib')
+        return model, gender_encoder, symptom_vectorizer, age_scaler
     except FileNotFoundError:
-        print("Training new model...")
-        train_model()
-        model = joblib.load('disease_model.joblib')
-        gender_encoder = joblib.load('gender_encoder.joblib')
-        symptom_vectorizer = joblib.load('symptom_vectorizer.joblib')
-    return model, gender_encoder, symptom_vectorizer
+        st.warning("Training new model... This may take a moment.")
+        try:
+            train_model()  # Train the model
+            # Try loading again after training
+            model = joblib.load('disease_model.joblib')
+            gender_encoder = joblib.load('gender_encoder.joblib')
+            symptom_vectorizer = joblib.load('symptom_vectorizer.joblib')
+            age_scaler = joblib.load('age_scaler.joblib')
+            return model, gender_encoder, symptom_vectorizer, age_scaler
+        except Exception as e:
+            st.error(f"Error in model training/loading: {str(e)}")
+            raise
 
 # Update prediction function
 def predict_disease(age, gender, symptoms, severity="Moderate", duration="Recent (Days)"):
     """Enhanced disease prediction with severity and duration"""
-    model, gender_encoder, symptom_vectorizer = load_ml_components()
+    model, gender_encoder, symptom_vectorizer, age_scaler = load_ml_components()
     
     try:
         # Process features
         gender_encoded = gender_encoder.transform([gender])
         symptoms_vectorized = symptom_vectorizer.transform([symptoms])
-        age_formatted = np.array([age]).reshape(-1, 1)
+        age_scaled = age_scaler.transform(np.array([age]).reshape(-1, 1))
         
         # Add severity and duration factors
         severity_factor = {"Mild": 0.8, "Moderate": 1.0, "Severe": 1.2}
@@ -53,7 +61,7 @@ def predict_disease(age, gender, symptoms, severity="Moderate", duration="Recent
         }
         
         # Combine features
-        X = np.hstack((age_formatted, gender_encoded.reshape(-1, 1), 
+        X = np.hstack((age_scaled, gender_encoded.reshape(-1, 1), 
                       symptoms_vectorized.toarray()))
         
         # Get prediction and adjust by severity/duration
