@@ -127,7 +127,8 @@ def query_openrouter(prompt):
     return "Unable to generate explanation. Please try again."
 
 def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
-    """Get AI explanation for the prediction"""
+    """Get AI explanation using multiple models"""
+    
     prompt = f"""
     Please explain this heart disease risk assessment in simple terms:
     
@@ -145,8 +146,32 @@ def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
     3. General recommendations (without giving medical advice)
     """
     
-    explanation = query_openrouter(prompt)
-    return explanation
+    # Try OpenRouter first
+    try:
+        explanation = query_openrouter(prompt)
+        if explanation != "Unable to generate explanation. Please try again.":
+            return explanation
+    except:
+        pass
+    
+    # Try Hugging Face models
+    try:
+        from transformers import pipeline
+        classifier = pipeline("text2text-generation", 
+                            model="google/flan-t5-base")
+        explanation = classifier(prompt)[0]['generated_text']
+        return explanation
+    except:
+        pass
+    
+    # Try local LLaMA model as fallback
+    try:
+        from llama_cpp import Llama
+        llm = Llama(model_path="models/llama-2-7b-chat.gguf")
+        explanation = llm(prompt)['choices'][0]['text']
+        return explanation
+    except:
+        return "Unable to generate explanation. Please try again."
 
 def add_to_history(name, age, gender, symptoms, disease, risk_score):
     """Add prediction to history"""
@@ -274,7 +299,8 @@ def export_data():
             mime=mime
         )
 
-def main():
+def show_prediction_tool():
+    """Show the prediction tool interface"""
     # Add custom CSS
     st.markdown("""
         <style>
@@ -357,6 +383,40 @@ def main():
                     export_data()
             else:
                 st.warning("Please fill in all required fields")
+
+def show_admin_dashboard():
+    """Show the admin dashboard interface"""
+    st.markdown("### 🛠️ Admin Dashboard")
+    st.write("Admin functionalities will be implemented here.")
+
+def login_user():
+    """Login user interface"""
+    st.markdown("### 🔐 Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if username == "admin" and password == "admin":
+            st.session_state.logged_in = True
+            st.session_state.is_admin = True
+        elif username and password:
+            st.session_state.logged_in = True
+            st.session_state.is_admin = False
+        else:
+            st.warning("Invalid credentials")
+
+def main():
+    if 'logged_in' not in st.session_state:
+        login_user()
+        return
+        
+    if st.session_state.get('is_admin'):
+        tab1, tab2 = st.tabs(["Prediction Tool", "Admin Dashboard"])
+        with tab1:
+            show_prediction_tool()
+        with tab2:
+            show_admin_dashboard()
+    else:
+        show_prediction_tool()
 
 if __name__ == "__main__":
     main()
