@@ -85,84 +85,72 @@ def predict_disease(age, gender, symptoms, severity="Moderate", duration="Recent
 # Query OpenRouter with AI models
 def query_openrouter(prompt):
     """Query OpenRouter API for AI explanation"""
+    if not OPENROUTER_API_KEY:
+        st.error("OpenRouter API key not found. Please check your .env file.")
+        return "Unable to generate explanation: API key missing."
+
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://localhost:8501",
         "Content-Type": "application/json"
     }
 
-    models = [
-        "mistralai/mistral-7b-instruct",
-        "anthropic/claude-2",
-        "google/palm-2-chat-bison"
-    ]
-
-    for model in models:
-        try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": model,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are a medical AI assistant helping explain disease predictions."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ]
-                },
-                timeout=30
-            )
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "mistralai/mistral-7b-instruct",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a medical AI assistant. Provide clear, professional explanations of disease risk assessments."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            st.error(f"API Error: {response.status_code} - {response.text}")
+            return None
             
-            if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            st.error(f"Error with {model}: {str(e)}")
-            continue
-    
-    return "Unable to generate explanation. Please try again."
+    except requests.exceptions.RequestException as e:
+        st.error(f"Request failed: {str(e)}")
+        return None
 
 def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
-    """Get AI explanation using multiple models"""
-    
+    """Get AI explanation for the prediction"""
     prompt = f"""
-    Please explain this heart disease risk assessment in simple terms:
-    
-    Patient Details:
+    Analyze this heart disease risk assessment and provide a clear medical explanation:
+
+    Patient Profile:
     - Age: {age}
     - Gender: {gender}
-    - Symptoms: {symptoms}
-    
-    Prediction: {prediction}
-    Risk Score: {risk_score}%
-    
-    Provide a brief, clear explanation focusing on:
-    1. What the risk score means
-    2. Key factors contributing to the prediction
-    3. General recommendations (without giving medical advice)
+    - Reported Symptoms: {symptoms}
+
+    Assessment Results:
+    - Prediction: {prediction}
+    - Risk Score: {risk_score}%
+
+    Please provide:
+    1. A brief interpretation of the risk score
+    2. Key factors that influenced this prediction
+    3. General health recommendations (avoid specific medical advice)
+    4. When to seek medical attention
     """
+
+    explanation = query_openrouter(prompt)
     
-    # Try OpenRouter first
-    try:
-        explanation = query_openrouter(prompt)
-        if explanation != "Unable to generate explanation. Please try again.":
-            return explanation
-    except:
-        pass
-    
-    # Try Hugging Face models as fallback
-    try:
-        from transformers import pipeline
-        classifier = pipeline("text2text-generation", 
-                            model="google/flan-t5-base")
-        explanation = classifier(prompt)[0]['generated_text']
-        return explanation
-    except:
+    if not explanation:
         return "Unable to generate explanation. Please try again."
+        
+    return explanation
 
 def add_to_history(name, age, gender, symptoms, disease, risk_score):
     """Add prediction to history"""
@@ -358,10 +346,16 @@ def show_prediction_tool():
                     with col2:
                         st.metric("Risk Score", f"{risk_score}%")
                     
-                    with st.spinner("Generating explanation..."):
+                    # Debug section
+                    st.sidebar.markdown("### 🔍 Debug Info")
+                    if st.sidebar.checkbox("Show API Details"):
+                        st.sidebar.write("API Key Status:", "✅ Present" if OPENROUTER_API_KEY else "❌ Missing")
+                    
+                    with st.spinner("Generating medical explanation..."):
                         explanation = get_ai_explanation(age, gender, symptoms, disease, risk_score)
-                        st.markdown("### 🤖 AI Explanation")
-                        st.markdown(explanation)
+                        if explanation != "Unable to generate explanation. Please try again.":
+                            st.markdown("### 🤖 AI Medical Explanation")
+                            st.markdown(explanation)
                     
                     add_to_history(name, age, gender, symptoms, disease, risk_score)
                     show_prediction_history()
