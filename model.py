@@ -111,58 +111,39 @@ def create_sample_data(n_samples=5000):
     
     return pd.DataFrame(data)
 
+def get_symptom_suggestions():
+    """
+    Returns a dictionary of symptom categories and their respective symptoms.
+    """
+    return {
+        'common': ['fatigue', 'dizziness', 'nausea', 'headache', 'sweating'],
+        'heart_specific': ['chest pain', 'chest pressure', 'arm pain', 'jaw pain', 'shortness of breath', 'irregular heartbeat'],
+        'general': ['cough', 'runny nose', 'muscle tension', 'trouble sleeping', 'anxiety']
+    }
+
 def train_model():
-    # Create dataset with more samples
-    df = create_sample_data(n_samples=5000)
+    """Train model with symptom vectorization"""
+    # Create sample dataset
+    df = create_sample_data()
     
     # Initialize encoders
     gender_encoder = LabelEncoder()
-    symptom_vectorizer = TfidfVectorizer(max_features=100)
-    scaler = StandardScaler()
+    # Create and fit the TF-IDF vectorizer with all possible symptoms
+    all_symptoms = []
+    for category in get_symptom_suggestions().values():
+        all_symptoms.extend(category)
+    symptom_vectorizer = TfidfVectorizer(vocabulary=all_symptoms)
     
     # Encode features
     X_gender = gender_encoder.fit_transform(df['gender'])
+    # Ensure symptoms are strings before vectorization
+    df['symptoms'] = df['symptoms'].astype(str)
     X_symptoms = symptom_vectorizer.fit_transform(df['symptoms'])
-    X_age = scaler.fit_transform(df['age'].values.reshape(-1, 1))
+    X_age = df['age'].values.reshape(-1, 1)
     
     # Combine features
     X = np.hstack((X_age, X_gender.reshape(-1, 1), X_symptoms.toarray()))
     y = (df['disease'] == 'Heart Disease').astype(int)
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # Create feature pipeline
-    feature_pipeline = Pipeline([
-        ('scaler', StandardScaler()),
-        ('classifier', GradientBoostingClassifier())
-    ])
-    
-    # Parameter grid for optimization
-    param_grid = {
-        'classifier__n_estimators': [100, 200, 300],
-        'classifier__learning_rate': [0.01, 0.1],
-        'classifier__max_depth': [3, 4, 5],
-        'classifier__min_samples_split': [2, 5],
-        'classifier__subsample': [0.8, 0.9, 1.0]
-    }
-    
-    # Grid search with cross-validation
-    grid_search = GridSearchCV(
-        feature_pipeline,
-        param_grid,
-        cv=5,
-        scoring='accuracy',
-        n_jobs=-1
-    )
-    
-    # Fit model
-    grid_search.fit(X_train, y_train)
-    
-    # Print results
-    print(f"Best parameters: {grid_search.best_params_}")
-    print(f"Best cross-validation accuracy: {grid_search.best_score_:.3f}")
-    print(f"Test set accuracy: {grid_search.score(X_test, y_test):.3f}")
 
 if __name__ == "__main__":
     train_model()
