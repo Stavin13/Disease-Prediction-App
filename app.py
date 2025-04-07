@@ -83,38 +83,54 @@ def predict_disease(age, gender, symptoms, severity="Moderate", duration="Recent
         return "Error in prediction", 0
 
 # Query OpenRouter with AI models
-def query_openrouter(prompt, models=["reka-core", "deepseek-chat", "mistral-7b-instruct"]):
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://yourapp.com",
-        "X-Title": "Disease Predictor"
-    }
-    for model in models:
-        try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={"model": model, "messages": [{"role": "user", "content": prompt}]}
-            )
-            data = response.json()
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"], model
-        except Exception as e:
-            print(f"Model {model} failed: {e}")
-    return "Unable to explain the result.", "None"
-
-def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
-    """Get AI explanation for the prediction"""
-    
+def query_openrouter(prompt):
+    """Query OpenRouter API for AI explanation"""
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "HTTP-Referer": "https://localhost:8501",
         "Content-Type": "application/json"
     }
+
+    models = [
+        "mistralai/mistral-7b-instruct",
+        "anthropic/claude-2",
+        "google/palm-2-chat-bison"
+    ]
+
+    for model in models:
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a medical AI assistant helping explain disease predictions."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            st.error(f"Error with {model}: {str(e)}")
+            continue
     
-    # Prepare prompt for the AI
+    return "Unable to generate explanation. Please try again."
+
+def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
+    """Get AI explanation for the prediction"""
     prompt = f"""
-    As a medical AI assistant, explain this heart disease risk assessment:
+    Please explain this heart disease risk assessment in simple terms:
+    
     Patient Details:
     - Age: {age}
     - Gender: {gender}
@@ -123,35 +139,14 @@ def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
     Prediction: {prediction}
     Risk Score: {risk_score}%
     
-    Provide a brief, clear explanation of this assessment and what it means for the patient.
+    Provide a brief, clear explanation focusing on:
+    1. What the risk score means
+    2. Key factors contributing to the prediction
+    3. General recommendations (without giving medical advice)
     """
     
-    # Models to try in order of preference
-    models = [
-        "mistralai/mistral-7b-instruct",
-        "anthropic/claude-2",
-        "google/palm-2-chat-bison"
-    ]
-    
-    for model in models:
-        try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}]
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                explanation = response.json()["choices"][0]["message"]["content"]
-                return explanation
-        except Exception as e:
-            continue
-    
-    return "Unable to generate AI explanation at this moment."
+    explanation = query_openrouter(prompt)
+    return explanation
 
 def add_to_history(name, age, gender, symptoms, disease, risk_score):
     """Add prediction to history"""
@@ -334,46 +329,34 @@ def main():
     # Center the predict button
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        predict_button = st.button("🔮 Predict")
-    
-    if predict_button:
-        if name and symptoms:
-            # Validate symptoms
-            valid_symptoms, unknown_symptoms = validate_symptoms(symptoms)
-            if unknown_symptoms:
-                st.warning(f"Unknown symptoms: {', '.join(unknown_symptoms)}")
-            
-            if valid_symptoms:
-                # Get prediction
-                disease, risk_score = predict_disease(age, gender, symptoms, severity, duration)
-                
-                # Get AI explanation
-                explanation = get_ai_explanation(age, gender, symptoms, disease, risk_score)
-                
-                # Display results
-                st.subheader("Prediction Results")
-                st.write(f"Disease: {disease}")
-                st.write(f"Risk Score: {risk_score}%")
-                
-                st.subheader("AI Explanation")
-                st.write(explanation)
-                
-                # Add to history
-                add_to_history(name, age, gender, symptoms, disease, risk_score)
-                
-                # Show history
-                show_prediction_history()
-                
-                # Add analytics
-                show_analytics()
-                
-                # Add export option
-                st.markdown("### 📥 Export Data")
-                export_data()
+        if st.button("Predict"):
+            if name and symptoms:
+                with st.spinner("Analyzing symptoms..."):
+                    disease, risk_score = predict_disease(age, gender, symptoms, severity, duration)
+                    
+                    st.subheader("🏥 Prediction Results")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Disease Prediction", disease)
+                    with col2:
+                        st.metric("Risk Score", f"{risk_score}%")
+                    
+                    with st.spinner("Generating explanation..."):
+                        explanation = get_ai_explanation(age, gender, symptoms, disease, risk_score)
+                        st.markdown("### 🤖 AI Explanation")
+                        st.markdown(explanation)
+                    
+                    add_to_history(name, age, gender, symptoms, disease, risk_score)
+                    show_prediction_history()
+                    
+                    # Add analytics
+                    show_analytics()
+                    
+                    # Add export option
+                    st.markdown("### 📥 Export Data")
+                    export_data()
             else:
-                st.error("Please enter valid symptoms")
-        else:
-            st.warning("Please fill in all fields")
+                st.warning("Please fill in all required fields")
 
 if __name__ == "__main__":
     main()
