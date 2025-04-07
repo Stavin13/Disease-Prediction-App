@@ -18,6 +18,23 @@ if 'history' not in st.session_state:
 load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# Add debug code to check API key
+def check_api_key():
+    if not OPENROUTER_API_KEY:
+        st.sidebar.error("⚠️ API Key Missing!")
+        st.sidebar.markdown("""
+        1. Check if `.env` file exists
+        2. Verify content: `OPENROUTER_API_KEY=your-key`
+        3. Key format should start with 'sk-or-v1-'
+        """)
+        return False
+    else:
+        st.sidebar.success("✅ API Key Loaded")
+        # Show masked key for verification
+        masked_key = f"...{OPENROUTER_API_KEY[-8:]}"
+        st.sidebar.info(f"Key ends with: {masked_key}")
+        return True
+
 # Load models and encoders
 @st.cache_resource
 def load_ml_components():
@@ -393,7 +410,10 @@ def main():
     if 'logged_in' not in st.session_state:
         login_user()
         return
-        
+    
+    # Add API key check
+    api_key_valid = check_api_key()
+    
     if st.session_state.get('is_admin'):
         tab1, tab2 = st.tabs(["Prediction Tool", "Admin Dashboard"])
         with tab1:
