@@ -10,6 +10,10 @@ from model import train_model, preprocess_symptoms
 import plotly.express as px
 import plotly.graph_objects as go
 
+# Add this near the top of the file after imports
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
 # Load API Key
 load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -143,20 +147,21 @@ def get_ai_explanation(age, gender, symptoms, prediction, risk_score):
 
 def add_to_history(name, age, gender, symptoms, disease, risk_score):
     """Add prediction to history"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     st.session_state.history.append({
-        "Name": name,
-        "Age": age,
-        "Gender": gender,
-        "Symptoms": symptoms,
-        "Disease": disease,
-        "Score": risk_score,
-        "Date": str(datetime.date.today())
+        'Timestamp': timestamp,
+        'Name': name,
+        'Age': age,
+        'Gender': gender,
+        'Symptoms': symptoms,
+        'Disease': disease,
+        'Score': risk_score
     })
 
 def show_prediction_history():
-    """Display prediction history"""
+    """Display prediction history in a table"""
     if st.session_state.history:
-        st.markdown("### 📜 Prediction History")
+        st.markdown("### 📋 Prediction History")
         history_df = pd.DataFrame(st.session_state.history)
         st.dataframe(history_df)
 
