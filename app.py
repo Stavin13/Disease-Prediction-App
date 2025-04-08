@@ -403,9 +403,13 @@ def login_user():
         if username == "admin" and password == "admin":
             st.session_state.logged_in = True
             st.session_state.is_admin = True
+            st.session_state.user = username  # Add this line
+            st.rerun()  # Add this to refresh the app
         elif username and password:
             st.session_state.logged_in = True
             st.session_state.is_admin = False
+            st.session_state.user = username  # Add this line
+            st.rerun()  # Add this to refresh the app
         else:
             st.warning("Invalid credentials")
 
@@ -424,19 +428,22 @@ def main():
     st.title("🏥 Multiple Disease Prediction System")
     
     # Sidebar for navigation
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    
     menu = st.sidebar.selectbox(
         "Navigation",
         ["Login/Register", "Disease Prediction", "History & Analytics"]
     )
     
-    if menu == "Login/Register":
+    if menu == "Login/Register" and not st.session_state.logged_in:
         login_user()
-    elif menu == "Disease Prediction" and st.session_state.user:
-        show_prediction_tool()
-    elif menu == "History & Analytics" and st.session_state.user:
-        show_analytics()
-    else:
+    elif not st.session_state.logged_in:
         st.warning("Please login to access this feature")
+    elif menu == "Disease Prediction":
+        show_prediction_tool()
+    elif menu == "History & Analytics":
+        show_analytics()
 
 if __name__ == "__main__":
     create_user_table()
