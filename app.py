@@ -10,6 +10,19 @@ from model import train_model, preprocess_symptoms, DiseasePredictor
 import plotly.express as px
 import plotly.graph_objects as go
 import sqlite3
+import logging
+from streamlit.web import cli as stcli
+import sys
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 # Initialize session state
 if 'user' not in st.session_state:
@@ -424,27 +437,46 @@ def create_user_table():
     conn.commit()
     conn.close()
 
-def main():
-    st.title("🏥 Multiple Disease Prediction System")
-    
-    # Sidebar for navigation
-    if 'logged_in' not in st.session_state:
-        st.session_state.logged_in = False
-    
-    menu = st.sidebar.selectbox(
-        "Navigation",
-        ["Login/Register", "Disease Prediction", "History & Analytics"]
-    )
-    
-    if menu == "Login/Register" and not st.session_state.logged_in:
-        login_user()
-    elif not st.session_state.logged_in:
-        st.warning("Please login to access this feature")
-    elif menu == "Disease Prediction":
-        show_prediction_tool()
-    elif menu == "History & Analytics":
-        show_analytics()
+# Add error handling wrapper
+def handle_errors(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logging.error(f"Error in {func.__name__}: {str(e)}")
+            st.error(f"An error occurred: {str(e)}")
+            return None
+    return wrapper
 
+# Update the main function
+@handle_errors
+def main():
+    try:
+        if 'logged_in' not in st.session_state:
+            st.session_state.logged_in = False
+        
+        menu = st.sidebar.selectbox(
+            "Navigation",
+            ["Login/Register", "Disease Prediction", "History & Analytics"]
+        )
+        
+        if menu == "Login/Register" and not st.session_state.logged_in:
+            login_user()
+        elif not st.session_state.logged_in:
+            st.warning("Please login to access this feature")
+        elif menu == "Disease Prediction":
+            show_prediction_tool()
+        elif menu == "History & Analytics":
+            show_analytics()
+    except Exception as e:
+        logging.error(f"Error in main: {str(e)}")
+        st.error("An unexpected error occurred. Please try again.")
+
+# Update the entry point
 if __name__ == "__main__":
-    create_user_table()
-    main()
+    try:
+        create_user_table()
+        main()
+    except Exception as e:
+        logging.error(f"Application error: {str(e)}")
+        st.error("Application failed to start. Please check the logs.")
